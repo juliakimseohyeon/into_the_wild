@@ -1,0 +1,41 @@
+schema: into-the-wild
+
+# Project context — shown to the AI when creating OpenSpec artifacts.
+# This is a summary for spec work only. Keep it current as the app grows.
+context: |
+  Into The Wild — a cross-platform mobile app built with Capacitor.
+
+  Stack:
+  - Web layer: vanilla JS/HTML/CSS bundled by Vite (root is `src/`, output to
+    `dist/`). Entry point is `src/index.html`; app code in `src/js/`, styles in
+    `src/css/`, static assets in `src/assets/`.
+  - Native shell: Capacitor (`capacitor.config.json`, appId
+    `com.example.app`, webDir `dist`). Native plugins in use: @capacitor/camera,
+    @capacitor/splash-screen.
+
+  Conventions:
+  - Build the web assets with `npm run build` (Vite) before syncing to native.
+  - Run `npx cap sync` after changing web assets or adding Capacitor plugins so
+    the native iOS/Android projects pick up the latest `dist/` and config.
+  - Add native capabilities via Capacitor plugins; declare required device
+    permissions in the platform projects.
+  - Dev server: `npm start` (Vite).
+
+# Per-artifact rules — Into The Wild guardrails for generated artifacts.
+# Mirrors June's ticket-anchored workflow: specs -> design -> tasks, no separate
+# proposal artifact. If a tracking issue exists, link it as the PRD; otherwise
+# capture the "why" and product scope in the spec/design.
+rules:
+  specs:
+    - Link the tracking issue this change implements, or state "no ticket". When
+      there is no ticket, capture the problem statement and product scope here so
+      the spec is self-contained.
+  design:
+    - State engineering scope and a "Non-Goals" section explicitly.
+    - Call out any Capacitor plugin additions or native permission changes
+      explicitly, since each requires an `npx cap sync` and platform-project
+      follow-up step.
+  tasks:
+    - Reference concrete commands (e.g. `npm run build`, `npx cap sync`) where a
+      step requires them.
+    - Include a task to build the web assets and sync native before publishing.

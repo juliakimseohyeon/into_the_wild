@@ -1,0 +1,10 @@
+{
+  "appId": "com.example.app",
+  "appName": "into_the_wild",
+  "webDir": "dist",
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false
+    }
+  }
+}
