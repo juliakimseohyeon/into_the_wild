@@ -22,10 +22,10 @@ function availabilityText(campsite) {
     return 'Fully booked for the dates shown';
   }
   return (
-    'Available: ' +
+    'Available ' +
     campsite.availability
       .map((r) => `${formatDate(r.start)} – ${formatDate(r.end)}`)
-      .join(', ')
+      .join(' · ')
   );
 }
 
@@ -57,7 +57,7 @@ function campsiteCardHTML(c) {
   // Deep link to the correct BC Parks page only for reservation-required sites.
   const reserveLink =
     c.reservationType === 'reservation-required' && c.bcParksUrl
-      ? `<a class="reserve-btn" href="${esc(c.bcParksUrl)}" target="_blank" rel="noopener noreferrer">Reserve on BC Parks →</a>`
+      ? `<a class="reserve" href="${esc(c.bcParksUrl)}" target="_blank" rel="noopener noreferrer">Reserve on BC Parks <span aria-hidden="true">&rarr;</span></a>`
       : '';
 
   const seasonalNote = c.seasonalNote
@@ -65,16 +65,11 @@ function campsiteCardHTML(c) {
     : '';
 
   return `
-    <li class="card${fullyBooked ? ' is-booked' : ''}">
-      <div class="card-head">
-        <h3>${esc(c.name)}</h3>
-        <div class="badges">
-          <span class="badge type-${c.type}">${typeLabel}</span>
-          <span class="badge res-${c.reservationType}">${reservationLabel}</span>
-        </div>
-      </div>
-      <p class="place">${esc(c.park)} · ${esc(c.region)}</p>
-      <p class="availability">${esc(availabilityText(c))}</p>
+    <li class="site${fullyBooked ? ' is-booked' : ''}">
+      <p class="tags">${esc(typeLabel)} <span class="dot">&middot;</span> ${esc(reservationLabel)}</p>
+      <h2 class="site-name">${esc(c.name)}</h2>
+      <p class="place">${esc(c.park)}, ${esc(c.region)}</p>
+      <p class="avail">${esc(availabilityText(c))}</p>
       ${seasonalNote}
       ${reserveLink}
     </li>
@@ -99,84 +94,188 @@ window.customElements.define(
       root.innerHTML = `
     <style>
       :host {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        --ink: #26241f;
+        --muted: #79746a;
+        --faint: #a49e91;
+        --cream: #f6f1e7;
+        --hairline: #e4ddcd;
+        --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         display: block;
         width: 100%;
-        color: #1c2b22;
+        min-height: 100vh;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: var(--serif);
       }
-      header {
-        padding: 18px 15px;
-        background-color: #2f7d4f;
-        color: #fff;
+
+      /* ---- Hero: soft grainy pastel gradient ---- */
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: 64px 28px 56px;
+        text-align: center;
+        background:
+          radial-gradient(120% 120% at 18% 12%, #e9c9d4 0%, rgba(233,201,212,0) 55%),
+          radial-gradient(120% 120% at 85% 20%, #ead2bf 0%, rgba(234,210,191,0) 50%),
+          linear-gradient(120deg, #d7cfec 0%, #e6cdda 38%, #cfd4ee 68%, #efd6c4 100%);
       }
-      header h1 {
+      .hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.5;
+        mix-blend-mode: soft-light;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .wordmark {
+        position: relative;
         margin: 0;
-        font-size: 1.2em;
-        letter-spacing: 1px;
-        text-transform: uppercase;
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: clamp(2.6rem, 9vw, 4.2rem);
+        line-height: 0.95;
+        letter-spacing: 0.01em;
+        color: #211f1a;
       }
-      header p { margin: 4px 0 0; font-size: 0.85em; opacity: 0.9; }
+      .tagline {
+        position: relative;
+        margin: 18px 0 0;
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #4a463d;
+      }
+
+      /* ---- Search ---- */
       .search {
-        display: flex;
-        gap: 8px;
-        padding: 15px;
         position: sticky;
         top: 0;
-        background: #fff;
-        border-bottom: 1px solid #eee;
+        z-index: 2;
+        padding: 18px 24px;
+        background: var(--cream);
+        border-bottom: 1px solid var(--hairline);
       }
+      .search-inner { max-width: 680px; margin: 0 auto; }
       .search input {
-        flex: 1;
-        padding: 10px 12px;
-        font-size: 1em;
-        border: 1px solid #cfd8d2;
-        border-radius: 6px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 13px 20px;
+        font-family: var(--sans);
+        font-size: 0.95rem;
+        color: var(--ink);
+        background: #fffdf8;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        outline: none;
       }
-      .results { list-style: none; margin: 0; padding: 15px; display: grid; gap: 12px; }
-      .card {
-        border: 1px solid #e3e8e5;
-        border-radius: 8px;
-        padding: 14px;
-        background: #fff;
+      .search input::placeholder { color: var(--faint); }
+      .search input:focus { border-color: #b9b09a; }
+
+      /* ---- Results ---- */
+      .status {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 22px 24px 6px;
+        font-family: var(--sans);
+        font-size: 0.68rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
       }
-      .card.is-booked { opacity: 0.7; }
-      .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-      .card h3 { margin: 0; font-size: 1.05em; }
-      .place { margin: 6px 0 0; color: #55665c; font-size: 0.9em; }
-      .availability { margin: 8px 0 0; font-size: 0.9em; }
-      .note { margin: 6px 0 0; font-size: 0.82em; color: #7a5b00; background: #fff8e1; padding: 6px 8px; border-radius: 5px; }
-      .badges { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-      .badge { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 7px; border-radius: 999px; white-space: nowrap; }
-      .type-frontcountry { background: #e3f0ff; color: #1c5fb0; }
-      .type-backcountry { background: #eae1ff; color: #5a3ea8; }
-      .res-reservation-required { background: #ffe6e0; color: #b0431c; }
-      .res-first-come { background: #e2f5e9; color: #2f7d4f; }
-      .reserve-btn {
+      .results {
+        list-style: none;
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 6px 24px 72px;
+      }
+      .site {
+        padding: 30px 0;
+        border-bottom: 1px solid var(--hairline);
+      }
+      .site.is-booked { opacity: 0.5; }
+      .tags {
+        margin: 0 0 10px;
+        font-family: var(--sans);
+        font-size: 0.66rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tags .dot { margin: 0 4px; color: var(--faint); }
+      .site-name {
+        margin: 0;
+        font-family: var(--serif);
+        font-weight: 400;
+        font-size: 1.7rem;
+        line-height: 1.15;
+      }
+      .place {
+        margin: 8px 0 0;
+        font-family: var(--sans);
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .avail {
+        margin: 14px 0 0;
+        font-size: 1.02rem;
+        color: var(--ink);
+      }
+      .note {
+        margin: 10px 0 0;
+        font-style: italic;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+      .reserve {
         display: inline-block;
-        margin-top: 12px;
-        padding: 9px 12px;
-        background-color: #2f7d4f;
-        color: #fff;
-        font-size: 0.85em;
-        border-radius: 6px;
+        margin-top: 18px;
+        font-family: var(--sans);
+        font-size: 0.72rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink);
         text-decoration: none;
+        border-bottom: 1px solid var(--ink);
+        padding-bottom: 3px;
       }
-      .empty { padding: 30px 15px; text-align: center; color: #55665c; }
-      .status { padding: 0 15px; font-size: 0.85em; color: #55665c; }
+      .reserve span { transition: margin-left 0.15s ease; }
+      .reserve:hover span { margin-left: 4px; }
+
+      .empty {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 80px 24px;
+        text-align: center;
+      }
+      .empty .mark { font-size: 1.6rem; color: var(--faint); }
+      .empty p {
+        margin: 18px 0 0;
+        font-size: 1.15rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
     </style>
-    <header>
-      <h1>Into The Wild</h1>
-      <p>Find available BC Parks campsites — frontcountry &amp; backcountry</p>
+
+    <header class="hero">
+      <h1 class="wordmark">into the wild</h1>
+      <p class="tagline">BC Parks campsite finder</p>
     </header>
+
     <div class="search">
-      <input
-        id="query"
-        type="search"
-        placeholder="Search by park, campground, or region…"
-        autocomplete="off"
-        aria-label="Search campsites"
-      />
+      <div class="search-inner">
+        <input
+          id="query"
+          type="search"
+          placeholder="Search by park, campground, or region"
+          autocomplete="off"
+          aria-label="Search campsites"
+        />
+      </div>
     </div>
+
     <p class="status" id="status" role="status" aria-live="polite"></p>
     <ul class="results" id="results"></ul>
       `;
@@ -203,8 +302,9 @@ window.customElements.define(
       try {
         campsites = await searchCampsites(query);
       } catch (e) {
-        this._status.textContent = 'Something went wrong loading campsites.';
-        this._results.innerHTML = '';
+        this._status.textContent = '';
+        this._results.innerHTML = `
+          <li class="empty"><p>Something went wrong loading campsites.</p></li>`;
         return;
       }
 
@@ -213,14 +313,17 @@ window.customElements.define(
       if (campsites.length === 0) {
         this._status.textContent = '';
         this._results.innerHTML = `
-          <li class="empty">No campsites found${q ? ` for “${esc(q)}”` : ''}.
-          Try a park name like “Garibaldi” or a region like “Sea-to-Sky”.</li>`;
+          <li class="empty">
+            <div class="mark">&mdash;</div>
+            <p>No campsites found${q ? ` for &ldquo;${esc(q)}&rdquo;` : ''}.
+            Try a park like &ldquo;Garibaldi&rdquo; or a region like &ldquo;Sea-to-Sky&rdquo;.</p>
+          </li>`;
         return;
       }
 
       this._status.textContent = `${campsites.length} campsite${
         campsites.length === 1 ? '' : 's'
-      }${q ? ` matching “${esc(q)}”` : ''}`;
+      }${q ? ` matching “${q}”` : ''}`;
       this._results.innerHTML = campsites.map(campsiteCardHTML).join('');
     }
   },
