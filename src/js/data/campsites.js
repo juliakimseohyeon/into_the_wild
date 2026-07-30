@@ -17,6 +17,7 @@
  * @property {string} name               Campsite / campground name.
  * @property {string} park               Parent park.
  * @property {string} region             BC region, for search + display.
+ * @property {{lat:number,lng:number}} coords  Approximate location, for the map view.
  * @property {'frontcountry'|'backcountry'} type
  * @property {'reservation-required'|'first-come'} reservationType
  * @property {string} [seasonalNote]     For backcountry sites whose reservation
@@ -33,6 +34,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Alouette Campground',
     park: 'Golden Ears Provincial Park',
     region: 'Lower Mainland',
+    coords: { lat: 49.297, lng: -122.467 },
     type: 'frontcountry',
     reservationType: 'reservation-required',
     availability: [
@@ -46,6 +48,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Alice Lake Campground',
     park: 'Alice Lake Provincial Park',
     region: 'Sea-to-Sky',
+    coords: { lat: 49.787, lng: -123.117 },
     type: 'frontcountry',
     reservationType: 'reservation-required',
     availability: [{ start: '2026-08-18', end: '2026-08-20' }],
@@ -56,6 +59,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Porteau Cove Campground',
     park: 'Porteau Cove Provincial Park',
     region: 'Sea-to-Sky',
+    coords: { lat: 49.560, lng: -123.230 },
     type: 'frontcountry',
     reservationType: 'reservation-required',
     // Fully booked for the period shown — exercises the "unavailable" state.
@@ -67,6 +71,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Garibaldi Lake',
     park: 'Garibaldi Provincial Park',
     region: 'Sea-to-Sky',
+    coords: { lat: 49.957, lng: -123.030 },
     type: 'backcountry',
     reservationType: 'reservation-required',
     seasonalNote:
@@ -79,6 +84,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Joffre Lakes (Upper Lake)',
     park: 'Joffre Lakes Provincial Park',
     region: 'Sea-to-Sky',
+    coords: { lat: 50.360, lng: -122.480 },
     type: 'backcountry',
     reservationType: 'reservation-required',
     availability: [{ start: '2026-09-01', end: '2026-09-03' }],
@@ -89,6 +95,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Berg Lake Trail',
     park: 'Mount Robson Provincial Park',
     region: 'Cariboo',
+    coords: { lat: 53.160, lng: -119.200 },
     type: 'backcountry',
     reservationType: 'reservation-required',
     seasonalNote:
@@ -101,6 +108,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Bowron Lake Canoe Circuit',
     park: 'Bowron Lake Provincial Park',
     region: 'Cariboo',
+    coords: { lat: 53.140, lng: -121.350 },
     type: 'backcountry',
     reservationType: 'reservation-required',
     seasonalNote: 'Special launch date for the full canoe circuit.',
@@ -112,6 +120,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Lightning Lake Campground',
     park: 'E.C. Manning Provincial Park',
     region: 'Okanagan',
+    coords: { lat: 49.058, lng: -120.870 },
     type: 'frontcountry',
     reservationType: 'reservation-required',
     availability: [{ start: '2026-08-12', end: '2026-08-16' }],
@@ -122,6 +131,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Hampton Campground',
     park: 'E.C. Manning Provincial Park',
     region: 'Okanagan',
+    coords: { lat: 49.060, lng: -120.780 },
     type: 'frontcountry',
     reservationType: 'first-come',
     availability: [{ start: '2026-08-01', end: '2026-09-30' }],
@@ -132,6 +142,7 @@ const SAMPLE_CAMPSITES = [
     name: 'Silvertip Campground',
     park: 'Skagit Valley Provincial Park',
     region: 'Lower Mainland',
+    coords: { lat: 49.100, lng: -121.100 },
     type: 'frontcountry',
     reservationType: 'first-come',
     availability: [{ start: '2026-08-01', end: '2026-09-30' }],
