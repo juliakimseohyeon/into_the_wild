@@ -1,179 +1,146 @@
 // Campsite data access layer for campsite-discovery.
 //
-// NOTE (see openspec/changes/add-campsite-discovery — open question):
-// BC Parks does not publish an open availability API, so the data below is
-// hand-authored SAMPLE data used to build and demo the discovery UI. The public
-// surface of this module (`searchCampsites`) is intentionally async so a real
-// data source (scraper, partner feed, backend endpoint) can be dropped in later
-// without changing the UI.
+// Real data comes from the official BC Parks Data API (see ./bcParksApi.js).
+// The list is fetched once and cached in memory; searches filter that cache so
+// there is a single network call per session.
+//
+// If the API is unreachable (offline, or a locked-down native CSP), we fall
+// back to the small snapshot below. These are REAL BC Parks values captured
+// from the API — not invented data — just enough to keep the app usable offline.
+
+import { fetchCampingParks } from './bcParksApi.js';
 
 /**
- * @typedef {Object} DateRange
- * @property {string} start ISO date (inclusive), e.g. "2026-08-01"
- * @property {string} end   ISO date (inclusive), e.g. "2026-08-05"
- *
  * @typedef {Object} Campsite
- * @property {string} id                 Stable slug.
- * @property {string} name               Campsite / campground name.
- * @property {string} park               Parent park.
- * @property {string} region             BC region, for search + display.
- * @property {{lat:number,lng:number}} coords  Approximate location, for the map view.
- * @property {'frontcountry'|'backcountry'} type
- * @property {'reservation-required'|'first-come'} reservationType
- * @property {string} [seasonalNote]     For backcountry sites whose reservation
- *                                       requirement varies by season.
- * @property {DateRange[]} availability  Available ranges; empty = fully booked.
- * @property {string|null} bcParksUrl    Official BC Parks reservation page for
- *                                       this site, or null for first-come sites.
+ * @property {string} id
+ * @property {string} name
+ * @property {{lat:number,lng:number}|null} coords
+ * @property {string[]} campingTypes
+ * @property {boolean} offersFrontcountry
+ * @property {boolean} offersBackcountry
+ * @property {boolean} hasReservations
+ * @property {boolean} hasFirstComeFirstServed
+ * @property {number|null} reservableSites
+ * @property {number|null} nonReservableSites
+ * @property {string|null} reservationUrl  Official BC Parks booking deep link.
+ * @property {string|null} parkUrl         The park's BC Parks page.
  */
 
-/** @type {Campsite[]} */
-const SAMPLE_CAMPSITES = [
+/** Offline fallback — real values captured from the BC Parks API. */
+const FALLBACK_CAMPSITES = /** @type {Campsite[]} */ ([
   {
-    id: 'golden-ears-alouette',
-    name: 'Alouette Campground',
-    park: 'Golden Ears Provincial Park',
-    region: 'Lower Mainland',
-    coords: { lat: 49.297, lng: -122.467 },
-    type: 'frontcountry',
-    reservationType: 'reservation-required',
-    availability: [
-      { start: '2026-08-11', end: '2026-08-14' },
-      { start: '2026-08-25', end: '2026-08-28' },
-    ],
-    bcParksUrl: 'https://bcparks.ca/golden-ears-park/',
+    id: 'alice-lake-park',
+    name: 'Alice Lake Park',
+    coords: { lat: 49.7822, lng: -123.117494 },
+    campingTypes: ['Frontcountry camping', 'RV-accessible camping', 'Walk-in camping', 'Group camping'],
+    offersFrontcountry: true,
+    offersBackcountry: false,
+    hasReservations: true,
+    hasFirstComeFirstServed: true,
+    reservableSites: 97,
+    nonReservableSites: 12,
+    reservationUrl:
+      'https://camping.bcparks.ca/create-booking/results?resourceLocationId=-2147483647&mapId=-2147483648&searchTabGroupId=0&bookingCategoryId=0&nights=1&isReserving=true&equipmentId=-32768&subEquipmentId=-32768&partySize=1',
+    parkUrl: 'https://bcparks.ca/alice-lake-park/',
   },
   {
-    id: 'alice-lake',
-    name: 'Alice Lake Campground',
-    park: 'Alice Lake Provincial Park',
-    region: 'Sea-to-Sky',
-    coords: { lat: 49.787, lng: -123.117 },
-    type: 'frontcountry',
-    reservationType: 'reservation-required',
-    availability: [{ start: '2026-08-18', end: '2026-08-20' }],
-    bcParksUrl: 'https://bcparks.ca/alice-lake-park/',
+    id: 'golden-ears-park',
+    name: 'Golden Ears Park',
+    coords: { lat: 49.437, lng: -122.472 },
+    campingTypes: ['Frontcountry camping', 'Backcountry camping', 'Group camping', 'RV-accessible camping'],
+    offersFrontcountry: true,
+    offersBackcountry: true,
+    hasReservations: true,
+    hasFirstComeFirstServed: true,
+    reservableSites: null,
+    nonReservableSites: null,
+    reservationUrl:
+      'https://camping.bcparks.ca/create-booking/results?resourceLocationId=-2147483606&mapId=-2147483576&searchTabGroupId=0&bookingCategoryId=0&nights=1&isReserving=true&equipmentId=-32768&subEquipmentId=-32768&partySize=1',
+    parkUrl: 'https://bcparks.ca/golden-ears-park/',
   },
   {
-    id: 'porteau-cove',
-    name: 'Porteau Cove Campground',
-    park: 'Porteau Cove Provincial Park',
-    region: 'Sea-to-Sky',
-    coords: { lat: 49.560, lng: -123.230 },
-    type: 'frontcountry',
-    reservationType: 'reservation-required',
-    // Fully booked for the period shown — exercises the "unavailable" state.
-    availability: [],
-    bcParksUrl: 'https://bcparks.ca/porteau-cove-park/',
+    id: 'garibaldi-park',
+    name: 'Garibaldi Park',
+    coords: { lat: 49.963373, lng: -122.670368 },
+    campingTypes: ['Backcountry camping', 'Wilderness camping', 'Cabins and huts', 'Winter camping'],
+    offersFrontcountry: false,
+    offersBackcountry: true,
+    hasReservations: true,
+    hasFirstComeFirstServed: false,
+    reservableSites: null,
+    nonReservableSites: null,
+    reservationUrl: null,
+    parkUrl: 'https://bcparks.ca/garibaldi-park/',
   },
   {
-    id: 'garibaldi-lake',
-    name: 'Garibaldi Lake',
-    park: 'Garibaldi Provincial Park',
-    region: 'Sea-to-Sky',
-    coords: { lat: 49.957, lng: -123.030 },
-    type: 'backcountry',
-    reservationType: 'reservation-required',
-    seasonalNote:
-      'Reservation required in peak season; first-come, first-served outside it.',
-    availability: [{ start: '2026-08-15', end: '2026-08-17' }],
-    bcParksUrl: 'https://bcparks.ca/garibaldi-park/',
+    id: 'allison-lake-park',
+    name: 'Allison Lake Park',
+    coords: { lat: 49.682479, lng: -120.603146 },
+    campingTypes: ['Frontcountry camping'],
+    offersFrontcountry: true,
+    offersBackcountry: false,
+    hasReservations: true,
+    hasFirstComeFirstServed: true,
+    reservableSites: 14,
+    nonReservableSites: 8,
+    reservationUrl:
+      'https://camping.bcparks.ca/create-booking/results?resourceLocationId=-2147483497&mapId=-2147483306&searchTabGroupId=0&bookingCategoryId=0&nights=1&isReserving=true&equipmentId=-32768&subEquipmentId=-32768&partySize=1',
+    parkUrl: 'https://bcparks.ca/allison-lake-park/',
   },
-  {
-    id: 'joffre-lakes',
-    name: 'Joffre Lakes (Upper Lake)',
-    park: 'Joffre Lakes Provincial Park',
-    region: 'Sea-to-Sky',
-    coords: { lat: 50.360, lng: -122.480 },
-    type: 'backcountry',
-    reservationType: 'reservation-required',
-    availability: [{ start: '2026-09-01', end: '2026-09-03' }],
-    bcParksUrl: 'https://bcparks.ca/joffre-lakes-park/',
-  },
-  {
-    id: 'berg-lake',
-    name: 'Berg Lake Trail',
-    park: 'Mount Robson Provincial Park',
-    region: 'Cariboo',
-    coords: { lat: 53.160, lng: -119.200 },
-    type: 'backcountry',
-    reservationType: 'reservation-required',
-    seasonalNote:
-      'Special launch date: all dates for the season open at once, not on a rolling basis.',
-    availability: [{ start: '2026-08-20', end: '2026-08-23' }],
-    bcParksUrl: 'https://bcparks.ca/mount-robson-park/',
-  },
-  {
-    id: 'bowron-lake-circuit',
-    name: 'Bowron Lake Canoe Circuit',
-    park: 'Bowron Lake Provincial Park',
-    region: 'Cariboo',
-    coords: { lat: 53.140, lng: -121.350 },
-    type: 'backcountry',
-    reservationType: 'reservation-required',
-    seasonalNote: 'Special launch date for the full canoe circuit.',
-    availability: [{ start: '2026-08-29', end: '2026-09-02' }],
-    bcParksUrl: 'https://bcparks.ca/bowron-lake-park/',
-  },
-  {
-    id: 'manning-lightning-lake',
-    name: 'Lightning Lake Campground',
-    park: 'E.C. Manning Provincial Park',
-    region: 'Okanagan',
-    coords: { lat: 49.058, lng: -120.870 },
-    type: 'frontcountry',
-    reservationType: 'reservation-required',
-    availability: [{ start: '2026-08-12', end: '2026-08-16' }],
-    bcParksUrl: 'https://bcparks.ca/ec-manning-park/',
-  },
-  {
-    id: 'manning-hampton',
-    name: 'Hampton Campground',
-    park: 'E.C. Manning Provincial Park',
-    region: 'Okanagan',
-    coords: { lat: 49.060, lng: -120.780 },
-    type: 'frontcountry',
-    reservationType: 'first-come',
-    availability: [{ start: '2026-08-01', end: '2026-09-30' }],
-    bcParksUrl: null,
-  },
-  {
-    id: 'skagit-silvertip',
-    name: 'Silvertip Campground',
-    park: 'Skagit Valley Provincial Park',
-    region: 'Lower Mainland',
-    coords: { lat: 49.100, lng: -121.100 },
-    type: 'frontcountry',
-    reservationType: 'first-come',
-    availability: [{ start: '2026-08-01', end: '2026-09-30' }],
-    bcParksUrl: null,
-  },
-];
+]);
 
-/**
- * Normalize a string for case-insensitive matching.
- * @param {string} s
- */
+/** @type {Promise<Campsite[]>|null} */
+let cache = null;
+/** True when the last load fell back to the offline snapshot. */
+let usedFallback = false;
+
+/** Load the full campsite list once, caching the promise. */
+function loadAll() {
+  if (!cache) {
+    cache = fetchCampingParks()
+      .then((parks) => {
+        usedFallback = false;
+        return parks;
+      })
+      .catch((err) => {
+        console.warn('BC Parks API unavailable; using offline snapshot.', err);
+        usedFallback = true;
+        return FALLBACK_CAMPSITES;
+      });
+  }
+  return cache;
+}
+
+/** Was the offline fallback used for the currently loaded data? */
+export function isUsingFallback() {
+  return usedFallback;
+}
+
 function norm(s) {
   return (s || '').toLowerCase().trim();
 }
 
 /**
- * Search BC Parks campsites (frontcountry and backcountry) by a location query.
- *
- * Matches the query against the campsite name, parent park, and region. An
- * empty query returns all campsites (initial browse). Async by design so a real
- * data source can replace the sample data without changing callers.
+ * Search BC Parks camping areas by a location query. Matches the query against
+ * the park name and its camping types (plus the words "frontcountry" /
+ * "backcountry"). An empty query returns everything (initial browse).
  *
  * @param {string} query
  * @returns {Promise<Campsite[]>}
  */
 export async function searchCampsites(query) {
+  const all = await loadAll();
   const q = norm(query);
-  if (!q) {
-    return SAMPLE_CAMPSITES.slice();
-  }
-  return SAMPLE_CAMPSITES.filter((c) =>
-    [c.name, c.park, c.region].some((field) => norm(field).includes(q)),
-  );
+  if (!q) return all.slice();
+  return all.filter((c) => {
+    const haystack = [
+      c.name,
+      ...(c.campingTypes || []),
+      c.offersFrontcountry ? 'frontcountry' : '',
+      c.offersBackcountry ? 'backcountry' : '',
+    ]
+      .map(norm)
+      .join(' ');
+    return haystack.includes(q);
+  });
 }

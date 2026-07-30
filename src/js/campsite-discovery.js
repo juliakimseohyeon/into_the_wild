@@ -1,38 +1,10 @@
 import { SplashScreen } from '@capacitor/splash-screen';
 import L from 'leaflet';
 import leafletCss from 'leaflet/dist/leaflet.css?inline';
-import { searchCampsites } from './data/campsites.js';
+import { searchCampsites, isUsingFallback } from './data/campsites.js';
 
-const MONTHS = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-// Marker colours by campsite type, used on the map and its legend.
+// Marker colours: parks offering frontcountry camping vs backcountry-only.
 const TYPE_COLOR = { frontcountry: '#3f6f9f', backcountry: '#7a4fa3' };
-
-/** Format an ISO date ("2026-08-11") as "Aug 11, 2026" without timezone drift. */
-function formatDate(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  return `${MONTHS[m - 1]} ${d}, ${y}`;
-}
-
-/** Render a campsite's availability as human-readable text. */
-function availabilityText(campsite) {
-  if (campsite.reservationType === 'first-come') {
-    return 'First-come, first-served — no reservation needed';
-  }
-  if (!campsite.availability || campsite.availability.length === 0) {
-    return 'Fully booked for the dates shown';
-  }
-  return (
-    'Available ' +
-    campsite.availability
-      .map((r) => `${formatDate(r.start)} – ${formatDate(r.end)}`)
-      .join(' · ')
-  );
-}
 
 /** Escape text destined for innerHTML. */
 function esc(s) {
@@ -49,49 +21,66 @@ function esc(s) {
   );
 }
 
-function typeLabelOf(c) {
-  return c.type === 'backcountry' ? 'Backcountry' : 'Frontcountry';
+/** "Frontcountry · Backcountry" — whichever the park offers. */
+function typeTagsOf(c) {
+  const tags = [];
+  if (c.offersFrontcountry) tags.push('Frontcountry');
+  if (c.offersBackcountry) tags.push('Backcountry');
+  return tags.length ? tags.join(' · ') : 'Camping';
 }
-function reservationLabelOf(c) {
-  return c.reservationType === 'reservation-required'
-    ? 'Reservation required'
-    : 'First-come, first-served';
+
+/** Reservation status line built from the real BC Parks flags. */
+function reservationTextOf(c) {
+  const parts = [];
+  if (c.hasReservations) parts.push('Reservable');
+  if (c.hasFirstComeFirstServed) parts.push('First-come sites');
+  let text = parts.join(' · ') || 'See BC Parks for details';
+
+  const counts = [];
+  if (c.reservableSites != null) counts.push(`${c.reservableSites} reservable`);
+  if (c.nonReservableSites != null) counts.push(`${c.nonReservableSites} first-come`);
+  if (counts.length) text += ` — ${counts.join(', ')} sites`;
+  return text;
 }
-function reserveLinkHTML(c, cls) {
-  return c.reservationType === 'reservation-required' && c.bcParksUrl
-    ? `<a class="${cls}" href="${esc(c.bcParksUrl)}" target="_blank" rel="noopener noreferrer">Reserve on BC Parks <span aria-hidden="true">&rarr;</span></a>`
-    : '';
+
+/** Link to the official BC Parks booking page, or the park page as a fallback. */
+function linkHTML(c, cls) {
+  if (c.reservationUrl) {
+    return `<a class="${cls}" href="${esc(c.reservationUrl)}" target="_blank" rel="noopener noreferrer">Reserve on BC Parks <span aria-hidden="true">&rarr;</span></a>`;
+  }
+  if (c.parkUrl) {
+    return `<a class="${cls}" href="${esc(c.parkUrl)}" target="_blank" rel="noopener noreferrer">View on BC Parks <span aria-hidden="true">&rarr;</span></a>`;
+  }
+  return '';
 }
 
 function campsiteCardHTML(c) {
-  const fullyBooked =
-    c.reservationType === 'reservation-required' &&
-    (!c.availability || c.availability.length === 0);
-  const seasonalNote = c.seasonalNote
-    ? `<p class="note">${esc(c.seasonalNote)}</p>`
+  const types = c.campingTypes && c.campingTypes.length
+    ? `<p class="place">${esc(c.campingTypes.join(', '))}</p>`
     : '';
-
   return `
-    <li class="site${fullyBooked ? ' is-booked' : ''}">
-      <p class="tags">${esc(typeLabelOf(c))} <span class="dot">&middot;</span> ${esc(reservationLabelOf(c))}</p>
+    <li class="site">
+      <p class="tags">${esc(typeTagsOf(c))}</p>
       <h2 class="site-name">${esc(c.name)}</h2>
-      <p class="place">${esc(c.park)}, ${esc(c.region)}</p>
-      <p class="avail">${esc(availabilityText(c))}</p>
-      ${seasonalNote}
-      ${reserveLinkHTML(c, 'reserve')}
+      ${types}
+      <p class="avail">${esc(reservationTextOf(c))}</p>
+      ${linkHTML(c, 'reserve')}
     </li>
   `;
 }
 
 /** Popup body shown when a map marker is clicked. */
 function popupHTML(c) {
+  const types = c.campingTypes && c.campingTypes.length
+    ? `<p class="pop-place">${esc(c.campingTypes.join(', '))}</p>`
+    : '';
   return `
     <div class="pop">
-      <p class="pop-tags">${esc(typeLabelOf(c))} &middot; ${esc(reservationLabelOf(c))}</p>
+      <p class="pop-tags">${esc(typeTagsOf(c))}</p>
       <h3 class="pop-name">${esc(c.name)}</h3>
-      <p class="pop-place">${esc(c.park)}, ${esc(c.region)}</p>
-      <p class="pop-avail">${esc(availabilityText(c))}</p>
-      ${reserveLinkHTML(c, 'pop-reserve')}
+      ${types}
+      <p class="pop-avail">${esc(reservationTextOf(c))}</p>
+      ${linkHTML(c, 'pop-reserve')}
     </div>
   `;
 }
@@ -351,7 +340,7 @@ window.customElements.define(
         <input
           id="query"
           type="search"
-          placeholder="Search by park, campground, or region"
+          placeholder="Search by park or camping type"
           autocomplete="off"
           aria-label="Search campsites"
         />
@@ -409,6 +398,8 @@ window.customElements.define(
     }
 
     async runSearch(query) {
+      if (!this._loaded) this._status.textContent = 'Loading BC Parks…';
+
       let campsites;
       try {
         campsites = await searchCampsites(query);
@@ -418,11 +409,13 @@ window.customElements.define(
         this._results.innerHTML = `<li class="empty"><p>Something went wrong loading campsites.</p></li>`;
         return;
       }
+      this._loaded = true;
 
       this._campsites = campsites;
       const q = (query || '').trim();
+      const offline = isUsingFallback() ? ' · offline snapshot' : '';
       this._status.textContent = campsites.length
-        ? `${campsites.length} campsite${campsites.length === 1 ? '' : 's'}${q ? ` matching “${q}”` : ''}`
+        ? `${campsites.length} park${campsites.length === 1 ? '' : 's'}${q ? ` matching “${q}”` : ''}${offline}`
         : '';
       this._lastQuery = q;
       this.renderActiveView();
@@ -443,8 +436,8 @@ window.customElements.define(
         this._results.innerHTML = `
           <li class="empty">
             <div class="mark">&mdash;</div>
-            <p>No campsites found${q ? ` for &ldquo;${esc(q)}&rdquo;` : ''}.
-            Try a park like &ldquo;Garibaldi&rdquo; or a region like &ldquo;Sea-to-Sky&rdquo;.</p>
+            <p>No parks found${q ? ` for &ldquo;${esc(q)}&rdquo;` : ''}.
+            Try a park like &ldquo;Garibaldi&rdquo; or a type like &ldquo;backcountry&rdquo;.</p>
           </li>`;
         return;
       }
@@ -472,15 +465,15 @@ window.customElements.define(
       const withCoords = this._campsites.filter((c) => c.coords);
       const bounds = [];
       withCoords.forEach((c) => {
-        const fullyBooked =
-          c.reservationType === 'reservation-required' &&
-          (!c.availability || c.availability.length === 0);
+        const fillColor = c.offersFrontcountry
+          ? TYPE_COLOR.frontcountry
+          : TYPE_COLOR.backcountry;
         const marker = L.circleMarker([c.coords.lat, c.coords.lng], {
-          radius: 8,
+          radius: 7,
           color: '#ffffff',
           weight: 2,
-          fillColor: TYPE_COLOR[c.type] || '#555',
-          fillOpacity: fullyBooked ? 0.35 : 0.9,
+          fillColor,
+          fillOpacity: 0.9,
         }).bindPopup(popupHTML(c));
         marker.addTo(this._markerLayer);
         bounds.push([c.coords.lat, c.coords.lng]);

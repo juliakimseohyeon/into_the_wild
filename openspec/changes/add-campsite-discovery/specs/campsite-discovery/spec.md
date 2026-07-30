@@ -14,9 +14,18 @@ capability.
 
 Priority: SECOND (after the multi-platform shell). This is the core free feature.
 
-Open questions (for design.md):
-- Availability data source: BC Parks does not publish an open availability API,
-  so the source of truth for campsite lists and availability needs to be decided.
+Data source (resolved):
+- Park catalogue, coordinates, camping types (front/backcountry), first-come vs
+  reservable flags, site counts, and official booking deep links come from the
+  official BC Parks Data API (GraphQL, https://bcparks.api.gov.bc.ca/graphql;
+  Open Government Licence – BC; public read, CORS: *). Implemented in
+  src/js/data/bcParksApi.js with an offline fallback snapshot.
+- LIVE availability (which specific dates are open) is NOT offered by any
+  official BC Parks API — it lives only in the UseDirect booking system behind
+  camping.bcparks.ca, which has no documented public API and is ToS-restricted
+  (same territory as the auto-booking investigation). Until that is resolved, the
+  app links users to the official booking page to check live availability rather
+  than displaying open dates itself.
 -->
 
 ## ADDED Requirements
